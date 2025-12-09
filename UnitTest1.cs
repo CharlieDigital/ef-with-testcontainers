@@ -34,6 +34,10 @@ public class UnitTest1 : IAsyncLifetime
     {
         using var context = _factory.CreateDbContext();
 
+        using var tx = await context.Database.BeginTransactionAsync(
+            TestContext.Current.CancellationToken
+        );
+
         var call1 = new PhoneCall() { CallTime = DateTime.UtcNow, PhoneNumber = "123-456-7890" };
         var call2 = new PhoneCall()
         {
@@ -58,6 +62,36 @@ public class UnitTest1 : IAsyncLifetime
         Assert.True(calls[0].Id > 0);
         Assert.True(calls[1].Id > 0);
     }
+
+    [Fact]
+    public async Task Test_Add_Call_With_topics()
+    {
+        using var context = _factory.CreateDbContext();
+
+        using var tx = await context.Database.BeginTransactionAsync(
+            TestContext.Current.CancellationToken
+        );
+
+        var call1 = new PhoneCall()
+        {
+            CallTime = DateTime.UtcNow,
+            PhoneNumber = "123-456-7890",
+            Topics = ["Support", "Billing"],
+        };
+
+        context.PhoneCalls.Add(call1);
+
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        context.ChangeTracker.Clear();
+
+        var calls = await context.PhoneCalls.ToListAsync(TestContext.Current.CancellationToken);
+
+        Assert.Single(calls);
+        Assert.Equal(2, calls[0].Topics.Count);
+        Assert.Contains("Support", calls[0].Topics);
+        Assert.Contains("Billing", calls[0].Topics);
+    }
 }
 
 public class SampleContext(DbContextOptions options) : DbContext(options)
@@ -71,6 +105,7 @@ public class PhoneCall
     public int Id { get; set; }
     public DateTime CallTime { get; set; }
     public required string PhoneNumber { get; set; }
+    public List<string> Topics { get; set; } = [];
 }
 
 public class Caller
